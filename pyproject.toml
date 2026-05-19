@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cc-anywhere"
+version = "1.2.0"
+description = "Memory built for AI coding. Captures Claude Code, Cowork, Codex, and Gemini CLI sessions into a local SQLite database — pick work back up with context, not guesswork."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Abe Couse"}
+]
+keywords = [
+    "cc-anywhere",
+    "claude-code",
+    "codex",
+    "ai-memory",
+    "ai",
+    "sync",
+    "developer-tools",
+    "productivity",
+    "anthropic",
+    "cli"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+    "Topic :: Utilities",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "rich>=10.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black",
+    "mypy",
+]
+
+[project.scripts]
+claude-anywhere = "cc_anywhere.cli:main"
+cc-anywhere = "cc_anywhere.cli:main"
+cca = "cc_anywhere.cli:main"
+claude-search = "cc_anywhere.cli:search_main"
+claude-sync = "cc_anywhere.cli:sync_main"
+cc-search = "cc_anywhere.cli:search_main"
+cc-sync = "cc_anywhere.cli:sync_main"
+
+[project.urls]
+Homepage = "https://github.com/abecouse/cc-anywhere"
+Repository = "https://github.com/abecouse/cc-anywhere"
+Issues = "https://github.com/abecouse/cc-anywhere/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]

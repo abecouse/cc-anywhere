@@ -8,3 +8,9 @@ venv/
 .DS_Store
 dist/
 build/
+
+# Local-only launch / planning notes — never pushed to the public repo
+LAUNCH-DAY.md
+BACKLOG.md
+MESSAGING.md
+*.xlsx

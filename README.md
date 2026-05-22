@@ -4,11 +4,21 @@
 
 > I wanted to remember what we discussed about my projects, and couldn't find past discussions, decisions, or feedback. The AI agents also seemed to forget.
 >
-> So I built cc-anywhere — for me, and for them. One memory layer; both audiences read it the same way.
->
-> — *Abe Couse*
+> So I built cc-anywhere — for me and the AI coding agents. One memory layer; both audiences read it the same way.
 
 Every Claude Code, Claude Cowork, Codex CLI / Desktop, and Gemini CLI session you run gets captured into a fast local SQLite database with full-text and natural-language search. Then you can ask any future session — Claude, Codex, Gemini, anything that can shell out to a CLI — *"what did we decide about auth last week?"* and get the actual past conversation back.
+
+---
+
+## Features
+
+- **Automatic capture** — every Claude Code, Codex, Cowork & Gemini CLI session is saved to a local SQLite database on session-end and hourly. Nothing to remember.
+- **Search your history** — `--ask` (by topic *or* time), `--search` (keyword + related-term matching), `--view` (open the full transcript), `--source` (jump to the raw line on disk).
+- **Cross-tool memory** — one shared database across all your coding agents, so Claude Code can pick up what Codex did, and vice versa.
+- **Digests** — `--daily` / `--weekly` / `--monthly` activity reports with per-project breakdowns and daily-activity charts: *what did I actually work on this week?*
+- **Local-first & private** — no cloud, no API key, no model inside. Your conversations stay in a SQLite file you own.
+- **Cross-machine sync** *(opt-in)* — bring-your-own-storage: a private GitHub repo, an external SSD, or an iCloud / Dropbox / NAS folder.
+- **Agent-callable** — the integration contract is plain stdout. Any agent with command-line access can use it — no MCP, no SDK, no plugin.
 
 ---
 
@@ -68,18 +78,6 @@ Once installed on a machine, any coding agent that can run local shell commands 
 
 ---
 
-## Build order
-
-The product order matters:
-
-1. Nail the CLI
-2. Nail agent integration
-3. Add other surfaces only after the core memory loop feels solid
-
-That keeps the project anchored on the actual engine: local capture, retrieval, and recall that both humans and coding agents can trust.
-
----
-
 ## Install
 
 One command on macOS and Linux (including WSL):
@@ -91,7 +89,7 @@ cc-anywhere --init
 
 `--init` is idempotent and does three things:
 
-1. Captures every existing Claude Code / Codex / Gemini session into the local SQLite DB and builds the semantic search index.
+1. Captures every existing Claude Code / Codex / Gemini session into the local SQLite DB and builds the search index.
 2. Wires SessionStart + Stop hooks into `~/.claude/settings.json` so future sessions auto-load past context and capture on exit. Existing hooks are preserved, never replaced.
 3. Sets up an hourly capture safety net (launchd on macOS, cron on Linux).
 
@@ -122,7 +120,7 @@ Every command below is platform-independent:
 
 ```bash
 cc-anywhere --ask "what did we decide about auth?"
-cc-anywhere --semantic-search "topic"
+cc-anywhere --search "topic"
 cc-anywhere --capture
 cc-anywhere --sync-archive       # full-history backup
 cc-anywhere --view <chunk_id>
@@ -185,32 +183,9 @@ cc-anywhere --sync-archive --to /Volumes/Backup-SSD/cc-anywhere/
 
 Idempotent — re-running just rewrites the archive with whatever's current. The same command works for any mounted destination.
 
-### Backing up to iCloud / Dropbox / Google Drive / NAS
+### Backing up to iCloud / Dropbox / NAS, or on a schedule
 
-Same command, different path:
-
-```bash
-# iCloud Drive
-cc-anywhere --sync-archive --to ~/Library/Mobile\ Documents/com~apple~CloudDocs/cc-anywhere/
-
-# Dropbox / Google Drive (via the desktop client's mounted folder)
-cc-anywhere --sync-archive --to ~/Dropbox/cc-anywhere/
-
-# NAS (after you've mounted it as a regular folder)
-cc-anywhere --sync-archive --to /Volumes/NAS-share/cc-anywhere/
-```
-
-Anything that mounts as a regular folder works.
-
-### Automatic backup every Friday
-
-Add a `crontab` entry:
-
-```bash
-0 18 * * 5  /usr/local/bin/cc-anywhere --sync-archive --to /Volumes/Backup-SSD/cc-anywhere/
-```
-
-6pm every Friday. (Replace the path to `cc-anywhere` with whatever `which cc-anywhere` reports on your machine.)
+The `--to` path can be any mounted folder — iCloud Drive, Dropbox, a NAS share. Automate it with a cron entry (e.g. weekly: `0 18 * * 5 cc-anywhere --sync-archive --to /Volumes/Backup-SSD/cc-anywhere/`).
 
 ### Checking what's actually captured
 
@@ -222,7 +197,7 @@ Shows session count, message count, project count, DB size, earliest and latest 
 
 ### Asking your AI to use cc-anywhere mid-session
 
-You usually don't have to. The `SessionStart` hook installed by `--init` auto-loads relevant past context when a Claude Code session begins. But you can also nudge mid-conversation: *"check past decisions on auth"*, and the AI will run `cc-anywhere --ask` for you.
+Just nudge it mid-conversation — *"check our past decisions on auth"* or *"what did we discuss about X?"* — and the AI runs `cc-anywhere --ask` for you (the `--init` instruction tells it to). The `SessionStart` hook also injects recent-project context at the start of each Claude Code session.
 
 ### What's local-only vs. what gets synced
 
@@ -271,7 +246,7 @@ These tools can use `cc-anywhere` as a search assistant and memory layer today, 
 
 | Tool | Status | Notes |
 |---|---|---|
-| Claude Code | ✅ | Can call `--ask`, `--db-search`, `--semantic-search`, `--view`, and `--source` directly or through slash-command / memory workflows |
+| Claude Code | ✅ | Can call `--ask`, `--db-search`, `--search`, `--view`, and `--source` directly or through slash-command / memory workflows |
 | Codex CLI | ✅ | Can call the same commands directly; the `threaded` skill makes this feel automatic |
 | Codex Desktop | ✅ | Same local CLI contract as Codex CLI |
 | Gemini CLI and other CLI-capable coding agents | In theory ✅ | They can use `cc-anywhere` as a search assistant once installed; capture support depends on their own local transcript format |
@@ -290,16 +265,15 @@ These are intentionally not first-class capture sources yet:
 
 The important distinction is that **calling** `cc-anywhere` and **being captured by** `cc-anywhere` are different things. A tool might be able to use it as a search assistant today even if we do not yet ingest that tool's own transcript history.
 
+Capture is incremental and resilient to compaction (the JSONL on disk is append-only, so `/compact` never destroys history), and stores **text only** — tool calls and their outputs are skipped, keeping the index focused on what you and the assistant actually said.
+
 ---
 
 ## First five minutes
 
 ```bash
-# Snapshot every Claude Code + Codex session into the local DB
+# Snapshot every session into the local DB (auto-builds the search index)
 cc-anywhere --capture
-
-# Build the natural-language search index
-cc-anywhere --index-semantic
 
 # Search by keyword
 cc-anywhere --db-search "verification customer"
@@ -324,26 +298,17 @@ That's the whole CLI surface that matters for daily use. The same commands also 
 
 ## Make it automatic
 
-The single highest-leverage move is wiring `--capture` and `--index-semantic` into Claude Code's Stop hook so the index stays current without you thinking about it. Append to your Stop hook script (e.g. `~/.claude/scripts/snapshot-memory.sh`):
+You don't have to do anything — **`cc-anywhere --init` already wires this up:** a Stop hook captures on session end, and an hourly `launchd` / `cron` job is the safety net for long-running sessions where Stop never fires. Capture is incremental (only new messages are processed) and auto-builds the search index, so the cost stays small as your corpus grows.
 
-```bash
-if command -v cc-anywhere >/dev/null 2>&1; then
-  cc-anywhere --capture        >> "$HOME/.claude-memory-archive/.last-capture.log"        2>&1 || true
-  cc-anywhere --index-semantic >> "$HOME/.claude-memory-archive/.last-index-semantic.log" 2>&1 || true
-fi
-```
-
-For long-running sessions that never end cleanly, also add a hourly launchd / cron job that runs the same two commands. Both steps are incremental — only new messages are processed — so the cost stays small as your corpus grows.
+If you'd rather script it yourself instead of using `--init`, just call `cc-anywhere --capture` from your own Stop hook — it's safe to run repeatedly.
 
 ---
 
 ## Pair with Claude Code and Codex
 
-Three custom slash commands at `~/.claude/commands/` give you `/digest`, `/projects`, and `/memory <query>` from any Claude Code session.
+After `--init`, the Stop hook captures on exit and a `SessionStart` hook injects recent context plus an instruction to reach for cc-anywhere — so you can nudge mid-session (*"what did we decide last week?"*) and the agent runs `cc-anywhere --ask` for you.
 
-A Codex skill at `~/.codex/skills/threaded/SKILL.md` does the same for Codex sessions — phrases like *"what did we decide last week?"* trigger the search automatically.
-
-Both surfaces call the same local database. Memory written by one assistant is visible to the other.
+Both Claude Code and Codex call the same local database, so memory written from one assistant is visible to the other.
 
 The important architectural point is that agents do not need to inspect SQLite directly. They can use:
 
@@ -359,27 +324,6 @@ In practical terms, any coding agent with local CLI access can call that interfa
 
 ---
 
-## What it captures
-
-| Source | Status |
-|---|---|
-| Claude Code (`~/.claude/projects/*.jsonl`) | ✅ |
-| Claude Cowork (`~/Library/Application Support/Claude/local-agent-mode-sessions/**/.claude/projects/*/*.jsonl`) | ✅ |
-| Codex CLI (`~/.codex/sessions/.../*.jsonl`) | ✅ |
-| Claude Code subagents (`*/subagents/*.jsonl`) | ⏳ planned |
-| Codex child/agent traces outside rollout logs | ⏳ investigate |
-| Cursor | ⏳ planned |
-| Continue.dev | ⏳ planned |
-| GitHub Copilot Chat | ⏳ planned |
-
-Capture is incremental, file-offset tracked, and resilient to context compaction (the JSONL on disk is append-only — `/compact` does not destroy history, so the full record stays searchable).
-
-Tool calls and their outputs are not captured — text only — to keep the index focused on what humans wrote and what assistants said in prose.
-
-Subagent transcripts are a future expansion. The current capture path indexes the main Claude Code session logs, Claude Cowork local-agent transcripts, and Codex rollout logs; nested Claude Code `subagents/*.jsonl` files and any Codex child-agent traces stored outside the rollout logs are intentionally left for a later pass so the opener stays focused.
-
----
-
 ## What it does not do
 
 - **It does not replace the AI's own memory.** It is the layer underneath that — the one that survives context windows, vendor changes, and machine reinstalls.
@@ -390,23 +334,18 @@ Subagent transcripts are a future expansion. The current capture path indexes th
 
 ## Beyond the basics
 
-Once the daily loop is working, the dashboard, sync, digests, and architecture are useful in this order:
+A few more commands once the daily loop is working:
 
-- **`cc-anywhere --weekly`** / **`--monthly`** — activity reports with project breakdowns and daily-activity bar charts
-- **`cc-anywhere --setup`** — wires up cross-machine sync via a private GitHub repo (lightweight metadata only)
-- **`cc-anywhere`** (no args) — interactive dashboard with pickup-prompt generation
-- **`cc-anywhere --backfill-sources`** — links older DB rows to their raw JSONL transcript paths so `--source` works on the back catalogue
-- **`cc-anywhere --index-semantic --rebuild`** — opt-in full re-index (rare; use after corruption)
-
-For the layered architecture (Layer 1 capture sources → Layer 2 archive → Layer 3 this tool → Layer 4 Threaded the deployed edition → Layer 5 surfaces), see the architecture document at `~/Documents/Projects/MEMORY-ARCHITECTURE.md`.
+- **`cc-anywhere --weekly`** / **`--monthly`** — activity reports with project breakdowns and charts
+- **`cc-anywhere --setup`** — wires up cross-machine sync via a private GitHub repo
+- **`cc-anywhere`** (no args) — interactive dashboard
 
 ---
 
 ## Status
 
-- **Version:** 1.1.0
+- **Version:** 1.2.0
 - **License:** Apache-2.0
 - **Source:** [github.com/abecouse/cc-anywhere](https://github.com/abecouse/cc-anywhere)
+- **Website:** [cc-anywhere.com](https://cc-anywhere.com)
 - **Author:** Abe Couse
-
-Threaded — the deployed, multi-machine, MCP-exposed version of this same memory layer — is the next album. `cc-anywhere` is the live local edition. Same chorus.

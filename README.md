@@ -175,6 +175,8 @@ cc-anywhere --pull
 
 The archive imports automatically. UUID dedup means you can re-run `--pull` any time without producing duplicates.
 
+> **Size note:** GitHub caps individual files at 100 MB. `--sync-archive` warns at 90 MB and stops at 95 MB — for very large histories, back up to a filesystem path instead (`--sync-archive --to /Volumes/SSD/...`). The everyday `--sync` slice stays small. (The local SQLite DB itself has no practical size limit.)
+
 ### Backing up to an external SSD
 
 ```bash
@@ -348,4 +350,4 @@ A few more commands once the daily loop is working:
 - **License:** Apache-2.0
 - **Source:** [github.com/abecouse/cc-anywhere](https://github.com/abecouse/cc-anywhere)
 - **Website:** [cc-anywhere.com](https://cc-anywhere.com)
-- **Author:** Abe Couse
+- **Author:** Abe Couse — interested in solving problems that help people

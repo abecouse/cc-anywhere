@@ -60,7 +60,7 @@ cc-search = "cc_anywhere.cli:search_main"
 cc-sync = "cc_anywhere.cli:sync_main"
 
 [project.urls]
-Homepage = "https://github.com/abecouse/cc-anywhere"
+Homepage = "https://cc-anywhere.com"
 Repository = "https://github.com/abecouse/cc-anywhere"
 Issues = "https://github.com/abecouse/cc-anywhere/issues"
 

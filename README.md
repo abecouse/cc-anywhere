@@ -8,6 +8,17 @@
 
 Every Claude Code, Claude Cowork, Codex CLI / Desktop, and Gemini CLI session you run gets captured into a fast local SQLite database with full-text and natural-language search. Then you can ask any future session — Claude, Codex, Gemini, anything that can shell out to a CLI — *"what did we decide about auth last week?"* and get the actual past conversation back.
 
+🌐 **[cc-anywhere.com](https://cc-anywhere.com)**
+
+## Try it out
+
+```bash
+pip install cc-anywhere
+cc-anywhere --init
+```
+
+Two minutes, fully local, no account. Open a fresh session and ask *"what did we decide last week?"* — recall fires automatically. Platform notes and manual commands are in [Install](#install) below.
+
 ---
 
 ## What you can do with it

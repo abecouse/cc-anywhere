@@ -645,13 +645,13 @@ _TEMPORAL_PATTERNS = [
                                                 "what-i-did",     24),
 ]
 
-# Topical-anchor signals — proper-noun-ish tokens, common bio/tech terms,
+# Topical-anchor signals — proper-noun-ish tokens, common tech terms,
 # project names. If the query has BOTH a temporal phrase AND a clear
 # topical anchor, route to "hybrid" rather than pure temporal.
 _TOPICAL_ANCHOR_RE = re.compile(
     r"\b("
-    r"[A-Z][A-Z0-9]{1,7}|"               # gene-symbol-shape: TIGIT, KRAS, PD-1
-    r"[A-Z][a-zA-Z]+(?:[A-Z][a-z]+)+|"   # CamelCase: BioAgent, OpenTargets
+    r"[A-Z][A-Z0-9]{1,7}|"               # acronym-shape: API, JWT, HTTP
+    r"[A-Z][a-zA-Z]+(?:[A-Z][a-z]+)+|"   # CamelCase: WebApp, DataStore
     r"about\s+\w+|"                       # "about <thing>"
     r"on\s+\w+\s+\w+"                     # "on the <thing>"
     r")\b"

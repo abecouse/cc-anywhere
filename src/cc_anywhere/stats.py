@@ -360,7 +360,7 @@ def show_usage():
 
     # ── Helper: merge project rows by lowercase name ──────────
     # The capture sources sometimes record different casings of the same
-    # project (e.g. "Bioxcell" and "BioXCell"). For usage display we want
+    # project (e.g. "Webapp" and "WebApp"). For usage display we want
     # them merged. Pick the variant with the highest session count as
     # the display label, sum the counts.
     def _merge_by_lower(rows):
@@ -462,7 +462,7 @@ def show_usage():
         print()
 
     # ── Top projects (this month + all time) ──────────────────
-    # Merge case-variants ("Bioxcell" + "BioXCell") via _merge_by_lower
+    # Merge case-variants ("Webapp" + "WebApp") via _merge_by_lower
     # before slicing to top 5.
     month_cutoff = _iso_cutoff(720)
     top_month_raw = db.execute(

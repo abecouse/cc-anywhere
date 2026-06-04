@@ -74,7 +74,7 @@ def _connect():
 
 
 def _canonical_name(name: str) -> str:
-    """Lowercase + alphanumeric only — collapses BioXCell/Bioxcell/biotarget variants."""
+    """Lowercase + alphanumeric only — collapses WebApp/Webapp/web-app variants."""
     return re.sub(r"[^a-z0-9]+", "", (name or "").lower()) or "(unknown)"
 
 
@@ -114,7 +114,7 @@ def list_projects(min_messages: int = 5) -> str:
 
     Projects whose names normalize to the same canonical key (lowercased,
     non-alphanumeric stripped) are grouped together. Surfaces fragmentation:
-    Bioxcell + BioXCell + biotarget collapse, but biotarget vs Bio-Agent
+    Webapp + WebApp + web-app collapse, but web-app vs api-server
     stay separate (different roots) — flagged for the user to consider.
     """
     conn = _connect()
@@ -180,8 +180,8 @@ def list_projects(min_messages: int = 5) -> str:
         out.append("")
 
         # Suggest cross-group merges where the canonical key prefixes match
-        # and there are multiple roots (e.g., 'bio*' covering biotarget,
-        # bioxcell, bioagent). Heuristic, not authoritative.
+        # and there are multiple roots (e.g., 'app*' covering webapp,
+        # api-app, admin-app). Heuristic, not authoritative.
         prefix_buckets: dict[str, list[str]] = defaultdict(list)
         for key in groups.keys():
             if len(key) >= 3:
@@ -265,7 +265,7 @@ def reconstruct_timeline(project_query: str, include_assistant: bool = False,
     Claude Code sessions and four Claude.ai conversations).
 
     Matching is case-insensitive against project_name AND session_label, so
-    `--timeline writer` catches the `writer` project, `Creative writer`,
+    `--timeline writer` catches the `writer` project, `My Writing App`,
     and any Claude.ai conversation with "writer" in its label.
     """
     conn = _connect()

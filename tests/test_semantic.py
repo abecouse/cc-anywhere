@@ -434,7 +434,7 @@ def test_incremental_index_works_for_codex_sessions(tmp_path):
         """,
         (
             "codex-sess-1",
-            "/Users/test/Projects/biotarget",
+            "/Users/test/Projects/myapp",
             "Review bio-target project",
             "2026-04-27T09:19:54",
             "2026-04-27T09:21:00",

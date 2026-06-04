@@ -205,7 +205,7 @@ def _print_json_context(answer: str) -> None:
 def display_header():
     """Display ASCII header."""
     if RICH:
-        console.print(Text(HEADER, style="bold cyan"))
+        console.print(Text(HEADER, style="bold red"))
         console.print("[bold]memory built for AI coding.[/bold]")
         console.print(f"[dim]v{__version__}[/dim]\n")
     else:

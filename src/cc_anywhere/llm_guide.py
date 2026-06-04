@@ -26,8 +26,8 @@ prior work — use `cc-anywhere`.
 `--mode keyword|semantic|hybrid`. Default is hybrid.
 
 ```
-cc-anywhere --search "BioTarget Score" --mode keyword
-cc-anywhere --search "what scoring approach we settled on" --mode semantic
+cc-anywhere --search "rate limiter" --mode keyword
+cc-anywhere --search "what rate-limiting approach we settled on" --mode semantic
 cc-anywhere --search "auth decisions"            # hybrid (default)
 ```
 
@@ -52,7 +52,7 @@ Examples:
 cc-anywhere --search "_search_chunks" --mode keyword
 
 # Find the rationale: semantic
-cc-anywhere --search "why we forked into bioxcell-app" --mode semantic
+cc-anywhere --search "why we forked the auth service" --mode semantic
 
 # General topic: hybrid (default)
 cc-anywhere --search "auth decisions"
@@ -98,7 +98,7 @@ For warm-up:
 
 ```
 cc-anywhere --ask "what did we decide about auth"
-cc-anywhere --ask "TIGIT preclinical decisions"
+cc-anywhere --ask "the caching strategy"
 cc-anywhere --ask "pricing model conversation"
 ```
 
@@ -149,7 +149,7 @@ When a query has both, the temporal slice runs first; the system
 suggests `--semantic-search "<topic>"` for the topical part.
 
 ```
-cc-anywhere --ask "what did we say about TIGIT yesterday"
+cc-anywhere --ask "what did we say about the API redesign yesterday"
 ```
 
 ### Drill-in

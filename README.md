@@ -10,15 +10,28 @@ Every Claude Code, Claude Cowork, Codex CLI / Desktop, and Gemini CLI session yo
 
 ---
 
-## Features
+## What you can do with it
 
-- **Automatic capture** — every Claude Code, Codex, Cowork & Gemini CLI session is saved to a local SQLite database on session-end and hourly. Nothing to remember.
-- **Search your history** — `--ask` (by topic *or* time), `--search` (keyword + related-term matching), `--view` (open the full transcript), `--source` (jump to the raw line on disk).
-- **Cross-tool memory** — one shared database across all your coding agents, so Claude Code can pick up what Codex did, and vice versa.
-- **Digests** — `--daily` / `--weekly` / `--monthly` activity reports with per-project breakdowns and daily-activity charts: *what did I actually work on this week?*
+- **Search across all your AI coding chats.** One query over every Claude Code, Codex, Cowork, and Gemini CLI session on your machine — ranked, with project, speaker, and timestamp.
+  ```bash
+  cc-anywhere --ask "what did we decide about auth?"
+  ```
+- **Let Claude Code in on your Codex sessions — and vice versa.** One shared local memory across every tool, so the work you did in one agent isn't invisible to the next.
+- **Get a new session up to speed on a previous one.** Hand a fresh session the thread you left off on — the actual reasoning, not a summary you'd have to write yourself.
+  ```bash
+  cc-anywhere --ask "catch me up"
+  ```
+- **Find what you discussed about a product feature.** Recall the *why* behind a call — the alternative you rejected, the constraint that forced it — that never made it into the code.
+  ```bash
+  cc-anywhere --ask "the pricing page"
+  ```
+
+**And under the hood:**
+
+- **Automatic capture** — every session is saved to a local SQLite database on session-end and hourly. Nothing to remember.
 - **Local-first & private** — no cloud, no API key, no model inside. Your conversations stay in a SQLite file you own.
-- **Cross-machine sync** *(opt-in)* — bring-your-own-storage: a private GitHub repo, an external SSD, or an iCloud / Dropbox / NAS folder.
 - **Agent-callable** — the integration contract is plain stdout. Any agent with command-line access can use it — no MCP, no SDK, no plugin.
+- **Digests & sync** — `--daily` / `--weekly` / `--monthly` activity reports, plus opt-in cross-machine sync (your own private GitHub repo, an external SSD, or an iCloud / Dropbox / NAS folder).
 
 ---
 
@@ -259,11 +272,8 @@ These are intentionally not first-class capture sources yet:
 
 | Source | Status |
 |---|---|
-| Claude Code subagents (`*/subagents/*.jsonl`) | ⏳ planned |
-| Codex child/agent traces outside rollout logs | ⏳ investigate |
-| Cursor | ⏳ planned |
-| Continue.dev | ⏳ planned |
-| GitHub Copilot Chat | ⏳ planned |
+| Cursor | ⏳ investigate |
+| GitHub Copilot Chat | ⏳ investigate |
 
 The important distinction is that **calling** `cc-anywhere` and **being captured by** `cc-anywhere` are different things. A tool might be able to use it as a search assistant today even if we do not yet ingest that tool's own transcript history.
 
@@ -306,23 +316,36 @@ If you'd rather script it yourself instead of using `--init`, just call `cc-anyw
 
 ---
 
-## Pair with Claude Code and Codex
+## For coding agents
 
-After `--init`, the Stop hook captures on exit and a `SessionStart` hook injects recent context plus an instruction to reach for cc-anywhere — so you can nudge mid-session (*"what did we decide last week?"*) and the agent runs `cc-anywhere --ask` for you.
+If you're an AI coding agent reading this — Claude Code, Codex, Gemini, anything with shell access — cc-anywhere is the user's memory of past sessions, and you can call it directly. (Claude Code and Codex read the same local DB, so memory written from one is visible to the other.) The full reference is one command away: **`cc-anywhere --llm-guide`**, from any directory. The short version:
 
-Both Claude Code and Codex call the same local database, so memory written from one assistant is visible to the other.
+**Call it when:**
+- The user references something decided or discussed before (auth, naming, "why we chose X", a past tradeoff) → `cc-anywhere --ask "<topic>"`
+- The user asks what they were working on — "catch me up", "yesterday", "this week" → `cc-anywhere --read [window]`
+- You need the full conversation behind a result → `cc-anywhere --view <chunk_id>`; the raw transcript line → `cc-anywhere --source <chunk_id>`
 
-The important architectural point is that agents do not need to inspect SQLite directly. They can use:
+**Don't call it for** the current state of files, repos, builds, or tests — read the filesystem (`git log`, the file). cc-anywhere indexes past *conversations*, not live code.
 
-```bash
-cc-anywhere --ask "what did we decide about auth?"
-cc-anywhere --view <chunk_id>
-cc-anywhere --source <chunk_id>
-```
+**What to do with results:** quote the decision back with its `chunk_id`. If your plan would contradict a past decision, flag it before proceeding — the user built this layer so you'd stop re-asking what was already settled.
 
-That makes `cc-anywhere` both a human CLI and a stable memory interface for coding agents.
+You never inspect the SQLite directly — the interface is plain stdout, so any agent with command-line access works. After `cc-anywhere --init`, this guidance is injected into every Claude Code session automatically (via a `SessionStart` hook), so you usually don't need it memorized.
 
-In practical terms, any coding agent with local CLI access can call that interface after install. The retrieval contract is vendor-neutral even though the current capture sources started with Claude Code and Codex.
+### Setting it up
+
+| Audience | How |
+|---|---|
+| **Terminal users** | `pip install cc-anywhere && cc-anywhere --init` |
+| **Captured agents** — Claude Code · Codex · Gemini | the **full set-up prompt** below (installs + self-wires) |
+| **Any other shell agent** — Cursor, Aider, Continue… | the **query-only prompt** below (reads existing memory) |
+
+**Full set-up prompt** — paste to Claude Code, Codex, or Gemini:
+
+> Set up cc-anywhere: run `pip install cc-anywhere && cc-anywhere --init`. Then add to your own instructions file (CLAUDE.md / AGENTS.md / your rules): *"Before deciding on anything we've discussed before, run `cc-anywhere --ask "<topic>"`; when I ask what I was working on, run `cc-anywhere --read`; quote results with their chunk_id."* Verify with `cc-anywhere --db-stats`.
+
+**Query-only prompt** — paste to any other shell-capable agent (Cursor, Aider, Continue, Windsurf, opencode):
+
+> You have `cc-anywhere` (already installed) — local search over my past AI-coding sessions. Use `cc-anywhere --ask "<topic>"` before decisions on things I've discussed before, and `cc-anywhere --read` when I ask what I was working on; quote results with their `chunk_id` (`cc-anywhere --llm-guide` for the full reference). Add this to your rules file so you remember.
 
 ---
 
@@ -346,7 +369,7 @@ A few more commands once the daily loop is working:
 
 ## Status
 
-- **Version:** 1.2.0
+- **Version:** 1.2.1
 - **License:** Apache-2.0
 - **Source:** [github.com/abecouse/cc-anywhere](https://github.com/abecouse/cc-anywhere)
 - **Website:** [cc-anywhere.com](https://cc-anywhere.com)

@@ -4,6 +4,16 @@ All notable changes to `cc-anywhere` are documented here.
 
 ---
 
+## [1.2.1] — 2026-06-03
+
+### Changed
+
+- Scrubbed example project names from documentation, code comments, and tests. The LLM guide, cheatsheet, sample CHANGELOG output, and inline comments now use neutral placeholder names (e.g. `web-app`, `api-server`) instead of real project names.
+- Header banner now renders in red.
+- README: reframed the feature list around use-cases; trimmed the not-yet-captured sources table.
+
+---
+
 ## [1.2.0] — 2026-05-01
 
 **Memory built for AI coding.** This release consolidates the project around a single category claim, broadens capture across every major coding-AI surface, adds a one-command install, and fills in the cross-machine backup story.
@@ -120,19 +130,19 @@ If you previously had hooks pointing at `claude-anywhere --capture` or `claude-a
 `cc-anywhere --source <chunk_id>` goes one level deeper: prints the raw transcript path, line range, byte range, and nearby JSONL lines for the source transcript behind an indexed chunk. `cc-anywhere --backfill-sources` attaches source pointers to older DB rows captured before transcript provenance existed.
 
 ```bash
-$ cc-anywhere --semantic-search "findings cards"
-[Bio-Agent] (2026-04-22 04:57 PDT, hybrid, 0.26)
-  ...everything downstream (findings cards, substantiation, timeline...
+$ cc-anywhere --semantic-search "retry logic"
+[my-app] (2026-04-22 04:57 PDT, hybrid, 0.26)
+  ...everything downstream (the retry queue, backoff, timeouts...
   → cc-anywhere --view eae07e00-...:273:a24c1d9b380a
 
 $ cc-anywhere --view eae07e00-...:273:a24c1d9b380a
-[Bio-Agent]  claude-code
+[my-app]  claude-code
   2026-04-22 04:57 PDT  →  2026-04-22 04:58 PDT  ·  7 messages  ·  1842 chars
 
 [full content]
 
 $ cc-anywhere --source eae07e00-...:273:a24c1d9b380a
-[Bio-Agent] raw transcript source
+[my-app] raw transcript source
   source: ~/.claude/projects/.../session.jsonl:1042-1078
 ```
 

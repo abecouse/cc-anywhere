@@ -104,7 +104,7 @@ def codex_dir(tmp_path):
         }) + "\n")
 
     entries = [
-        _session_meta("/Users/test/Projects/biotarget"),
+        _session_meta("/Users/test/Projects/myapp"),
         _user_msg("How do I shard the corpus?"),
         _assistant_msg("Use a hash on the PMID modulo the worker count."),
         _user_msg("Can you show me with code?"),
@@ -224,7 +224,7 @@ class TestCaptureCodexSessions:
     def test_project_path_from_session_meta(self, tmp_db, codex_dir):
         capture_codex_sessions(db=tmp_db, codex_dir=codex_dir)
         row = tmp_db.execute("SELECT project_path FROM sessions").fetchone()
-        assert row["project_path"] == "/Users/test/Projects/biotarget"
+        assert row["project_path"] == "/Users/test/Projects/myapp"
 
     def test_messages_store_source_provenance(self, tmp_db, codex_dir):
         capture_codex_sessions(db=tmp_db, codex_dir=codex_dir)
@@ -471,8 +471,8 @@ class TestClientMetadata:
             ) VALUES (?, ?, ?, ?, ?, ?, 'codex', NULL, NULL, NULL, NULL)""",
             (
                 SESSION_UUID,
-                "/Users/test/Projects/biotarget",
-                "biotarget",
+                "/Users/test/Projects/myapp",
+                "myapp",
                 "2026-04-27T09:19:54.000Z",
                 "2026-04-27T09:20:30.000Z",
                 "test-machine",
@@ -483,7 +483,7 @@ class TestClientMetadata:
         # Step 2: write a rollout file matching that session_id with metadata.
         entries = [
             _session_meta(
-                cwd="/Users/test/Projects/biotarget",
+                cwd="/Users/test/Projects/myapp",
                 originator="codex-tui",
                 source="cli",
                 cli_version="0.118.0",

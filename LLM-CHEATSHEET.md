@@ -55,7 +55,7 @@ Use semantic search across the conversation history.
 
 ```bash
 cc-anywhere --ask "what did we decide about auth"
-cc-anywhere --ask "TIGIT preclinical decisions"
+cc-anywhere --ask "the caching strategy"
 cc-anywhere --ask "pricing model conversation"
 ```
 
@@ -102,7 +102,7 @@ cc-anywhere --source <chunk_id>
 When a query has both, the temporal slice runs first; the system suggests `--semantic-search "<topic>"` for the topical part. Future versions will rank within the time window automatically.
 
 ```bash
-cc-anywhere --ask "what did we say about TIGIT yesterday"
+cc-anywhere --ask "what did we say about the API redesign yesterday"
 ```
 
 ### Drill-in
@@ -130,7 +130,7 @@ cc-anywhere --source <chunk_id>   # raw transcript provenance
 ### ❌ Don't use it for:
 
 - **Current state of project files** — use the filesystem (git log, ls, read).
-  cc-anywhere indexes captured *conversations*, not current *code*. If the user asks "what's the state of biotarget today," read biotarget's git log + project docs, not cc-anywhere.
+  cc-anywhere indexes captured *conversations*, not current *code*. If the user asks "what's the state of my-app today," read my-app's git log + project docs, not cc-anywhere.
 - **What's in this directory / what was just committed** — use git/ls.
 - **Did the test pass / does the build work** — run the test/build, don't search history.
 - **Any question whose answer is computed from current files** — the conversation index is stale by definition.

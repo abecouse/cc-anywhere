@@ -17,6 +17,8 @@ pip install cc-anywhere
 cc-anywhere --init
 ```
 
+> Prefer pipx, or `pip` blocked by `externally-managed-environment` (common with Homebrew Python)? `pipx install cc-anywhere` works the same.
+
 Two minutes, fully local, no account. Open a fresh session and ask *"what did we decide last week?"* — recall fires automatically. Platform notes and manual commands are in [Install](#install) below.
 
 ---
@@ -110,6 +112,8 @@ One command on macOS and Linux (including WSL):
 pip install cc-anywhere
 cc-anywhere --init
 ```
+
+> Prefer pipx, or `pip` blocked by `externally-managed-environment`? `pipx install cc-anywhere` works the same.
 
 `--init` is idempotent and does three things:
 
@@ -224,6 +228,8 @@ Shows session count, message count, project count, DB size, earliest and latest 
 ### Asking your AI to use cc-anywhere mid-session
 
 Just nudge it mid-conversation — *"check our past decisions on auth"* or *"what did we discuss about X?"* — and the AI runs `cc-anywhere --ask` for you (the `--init` instruction tells it to). The `SessionStart` hook also injects recent-project context at the start of each Claude Code session.
+
+**Tip — allow it once so recall is frictionless.** The first time your agent runs `cc-anywhere`, it may ask permission. Add it to your always-allow list (in Claude Code, approve "always allow" or add `Bash(cc-anywhere:*)` to `~/.claude/settings.json`) so future recalls happen without a prompt — that's what makes it feel like the agent "just remembers." Works the same in Claude Code's **CLI and Desktop**.
 
 ### What's local-only vs. what gets synced
 
@@ -352,11 +358,11 @@ You never inspect the SQLite directly — the interface is plain stdout, so any 
 
 **Full set-up prompt** — paste to Claude Code, Codex, or Gemini:
 
-> Set up cc-anywhere: run `pip install cc-anywhere && cc-anywhere --init`. Then add to your own instructions file (CLAUDE.md / AGENTS.md / your rules): *"Before deciding on anything we've discussed before, run `cc-anywhere --ask "<topic>"`; when I ask what I was working on, run `cc-anywhere --read`; quote results with their chunk_id."* Verify with `cc-anywhere --db-stats`.
+> cc-anywhere is an open-source local CLI ([github.com/abecouse/cc-anywhere](https://github.com/abecouse/cc-anywhere)) that captures your past coding sessions into a searchable local database. Install it: `pip install cc-anywhere && cc-anywhere --init` (verify with `cc-anywhere --db-stats`). Then, optionally, add a line to your instructions file (CLAUDE.md / AGENTS.md / rules) so future sessions know it's available — for example: *"You can use cc-anywhere to recall past context: run `cc-anywhere --ask "<topic>"` when it'd help, or `cc-anywhere --read` to catch up on recent work, and quote anything relevant with its chunk_id."* Adjust the wording to taste.
 
 **Query-only prompt** — paste to any other shell-capable agent (Cursor, Aider, Continue, Windsurf, opencode):
 
-> You have `cc-anywhere` (already installed) — local search over my past AI-coding sessions. Use `cc-anywhere --ask "<topic>"` before decisions on things I've discussed before, and `cc-anywhere --read` when I ask what I was working on; quote results with their `chunk_id` (`cc-anywhere --llm-guide` for the full reference). Add this to your rules file so you remember.
+> You have `cc-anywhere` (already installed) — open-source local search over my past AI-coding sessions ([github.com/abecouse/cc-anywhere](https://github.com/abecouse/cc-anywhere)). You can use `cc-anywhere --ask "<topic>"` to recall things I've discussed before, and `cc-anywhere --read` when I ask what I was working on; quote anything relevant with its `chunk_id` (`cc-anywhere --llm-guide` for the full reference). Feel free to add a line about it to your rules file — adjust to taste.
 
 ---
 

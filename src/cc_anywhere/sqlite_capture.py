@@ -12,6 +12,7 @@ import logging
 import re
 import sqlite3
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -115,6 +116,7 @@ CREATE TABLE IF NOT EXISTS messages (
     source_line INTEGER,
     source_byte_start INTEGER,
     source_byte_end INTEGER,
+    model TEXT,
     FOREIGN KEY (session_id) REFERENCES sessions(session_id)
 );
 
@@ -197,6 +199,11 @@ def _migrate_schema(db: sqlite3.Connection) -> None:
         db.execute("ALTER TABLE messages ADD COLUMN source_byte_start INTEGER")
     if "source_byte_end" not in msg_cols:
         db.execute("ALTER TABLE messages ADD COLUMN source_byte_end INTEGER")
+    # Model that produced each assistant message (claude-opus-4-7, gpt-5.5,
+    # gemini-3-flash-preview, …). Nullable: user messages and pre-existing
+    # rows stay NULL until --backfill-models or a re-capture fills them.
+    if "model" not in msg_cols:
+        db.execute("ALTER TABLE messages ADD COLUMN model TEXT")
 
     trigger = db.execute(
         "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_au'"
@@ -372,6 +379,23 @@ def _extract_assistant_text(entry: dict) -> str | None:
     return "\n\n".join(texts) if texts else None
 
 
+def _extract_model(entry: dict) -> str | None:
+    """Best-effort model id for an assistant message.
+
+    Claude Code nests it at message.model ("claude-opus-4-7"); Gemini puts it
+    at the top level ("gemini-3-flash-preview"). Codex carries the model
+    per-turn in turn_context records (not on the message), so it is threaded
+    separately inside capture_codex_sessions rather than here.
+    """
+    msg = entry.get("message")
+    if isinstance(msg, dict) and isinstance(msg.get("model"), str) and msg["model"]:
+        return msg["model"]
+    top = entry.get("model")
+    if isinstance(top, str) and top:
+        return top
+    return None
+
+
 def capture_sessions(db: sqlite3.Connection = None,
                      claude_dir: Path = None,
                      cowork_dir: Path = None) -> dict:
@@ -538,13 +562,14 @@ def capture_sessions(db: sqlite3.Connection = None,
                                 "INSERT OR IGNORE INTO messages "
                                 "(uuid, session_id, role, content, timestamp, parent_uuid, "
                                 "message_type, is_compact_summary, is_visible_in_transcript_only, "
-                                "source_path, source_line, source_byte_start, source_byte_end) "
-                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                "source_path, source_line, source_byte_start, source_byte_end, model) "
+                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                 (msg_uuid, session_id, "assistant", assistant_text,
                                  ts_str, parent_uuid, entry.get("type"),
                                  1 if entry.get("isCompactSummary") else 0,
                                  1 if entry.get("isVisibleInTranscriptOnly") else 0,
-                                 file_key, line_number, byte_start, byte_end)
+                                 file_key, line_number, byte_start, byte_end,
+                                 _extract_model(entry))
                             )
                             parent_uuid = msg_uuid
                             stats["new_messages"] += 1
@@ -762,6 +787,17 @@ def capture_codex_sessions(db: sqlite3.Connection = None,
         if file_size <= last_offset:
             continue
 
+        # Codex records the model per-turn in turn_context records, not on the
+        # message. Seed from this session's most recently captured model so a
+        # resumed capture (new byte range starting mid-turn) still stamps the
+        # right one; turn_context records below update it as they arrive.
+        mrow = db.execute(
+            "SELECT model FROM messages WHERE session_id = ? AND model IS NOT NULL "
+            "ORDER BY source_byte_start DESC LIMIT 1",
+            (session_id,)
+        ).fetchone()
+        current_model = mrow[0] if mrow and mrow[0] else None
+
         def _ensure_session(ts):
             nonlocal existing
             if existing:
@@ -838,6 +874,14 @@ def capture_codex_sessions(db: sqlite3.Connection = None,
                             line_number += 1
                         continue
 
+                    if rtype == "turn_context":
+                        m = payload.get("model")
+                        if m:
+                            current_model = m
+                        if line_number is not None:
+                            line_number += 1
+                        continue
+
                     if rtype != "response_item":
                         if line_number is not None:
                             line_number += 1
@@ -873,10 +917,11 @@ def capture_codex_sessions(db: sqlite3.Connection = None,
                     db.execute(
                         "INSERT OR IGNORE INTO messages "
                         "(uuid, session_id, role, content, timestamp, parent_uuid, "
-                        "source_path, source_line, source_byte_start, source_byte_end) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "source_path, source_line, source_byte_start, source_byte_end, model) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (msg_uuid, session_id, role, text, ts, parent_uuid,
-                         file_key, line_number, byte_start, byte_end)
+                         file_key, line_number, byte_start, byte_end,
+                         current_model if role == "assistant" else None)
                     )
                     parent_uuid = msg_uuid
                     stats["new_messages"] += 1
@@ -1133,11 +1178,12 @@ def capture_gemini_sessions(db: sqlite3.Connection = None,
                             "INSERT INTO messages "
                             "(uuid, session_id, role, content, timestamp, "
                             " source_path, source_line, "
-                            " source_byte_start, source_byte_end) "
-                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            " source_byte_start, source_byte_end, model) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             (msg_uuid, session_id, role, content, ts,
                              file_str, line_number,
-                             byte_start, byte_end)
+                             byte_start, byte_end,
+                             rec.get("model") if role == "assistant" else None)
                         )
                         stats["new_messages"] += 1
 
@@ -1158,6 +1204,124 @@ def capture_gemini_sessions(db: sqlite3.Connection = None,
             )
 
     db.commit()
+    if own_db:
+        db.close()
+    return stats
+
+
+def backfill_models(db: sqlite3.Connection = None) -> dict:
+    """One-time pass: populate messages.model for already-captured rows.
+
+    Claude Code and Gemini record the model on the assistant message line, so
+    we re-read each message's exact bytes via its stored provenance
+    (source_byte_start/end) and pull the model out. Codex records the model
+    per-turn in turn_context records (not on the message), so its files are
+    walked start-to-finish tracking the current model and matching messages
+    by (source_path, source_byte_start).
+
+    Idempotent and additive: only touches rows where role='assistant' and
+    model IS NULL, so re-running is safe and skips already-filled rows. New
+    captures fill model inline, so this is only needed once after upgrading.
+    """
+    own_db = db is None
+    if own_db:
+        db = get_db()
+
+    stats = {"updated": 0, "files": 0, "skipped_missing_file": 0}
+
+    # ── Claude Code + Gemini: model is on the message's own line ──
+    rows = db.execute(
+        "SELECT m.uuid, m.source_path, m.source_byte_start, m.source_byte_end "
+        "FROM messages m JOIN sessions s ON m.session_id = s.session_id "
+        "WHERE m.role = 'assistant' AND m.model IS NULL AND s.source != 'codex' "
+        "AND m.source_path IS NOT NULL AND m.source_byte_start IS NOT NULL "
+        "AND m.source_byte_end IS NOT NULL"
+    ).fetchall()
+
+    by_path = defaultdict(list)
+    for r in rows:
+        by_path[r["source_path"]].append(r)
+
+    for path, items in by_path.items():
+        try:
+            fh = open(path, "rb")
+        except OSError:
+            stats["skipped_missing_file"] += len(items)
+            continue
+        with fh:
+            for r in items:
+                try:
+                    fh.seek(r["source_byte_start"])
+                    raw = fh.read(r["source_byte_end"] - r["source_byte_start"])
+                    entry = json.loads(raw)
+                except (OSError, ValueError):
+                    continue
+                model = _extract_model(entry)
+                if model:
+                    db.execute(
+                        "UPDATE messages SET model = ? WHERE uuid = ?",
+                        (model, r["uuid"])
+                    )
+                    stats["updated"] += 1
+        stats["files"] += 1
+    db.commit()
+
+    # ── Codex: walk each file tracking the per-turn turn_context model ──
+    codex_paths = db.execute(
+        "SELECT DISTINCT m.source_path FROM messages m "
+        "JOIN sessions s ON m.session_id = s.session_id "
+        "WHERE s.source = 'codex' AND m.role = 'assistant' AND m.model IS NULL "
+        "AND m.source_path IS NOT NULL"
+    ).fetchall()
+
+    for prow in codex_paths:
+        path = prow["source_path"]
+        want = {
+            r["source_byte_start"]: r["uuid"]
+            for r in db.execute(
+                "SELECT m.source_byte_start, m.uuid FROM messages m "
+                "JOIN sessions s ON m.session_id = s.session_id "
+                "WHERE m.source_path = ? AND s.source = 'codex' "
+                "AND m.role = 'assistant' AND m.model IS NULL "
+                "AND m.source_byte_start IS NOT NULL",
+                (path,),
+            ).fetchall()
+        }
+        if not want:
+            continue
+        try:
+            fh = open(path, "r", encoding="utf-8")
+        except OSError:
+            stats["skipped_missing_file"] += len(want)
+            continue
+        current_model = None
+        with fh:
+            while True:
+                byte_start = fh.tell()
+                raw_line = fh.readline()
+                if not raw_line:
+                    break
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if rec.get("type") == "turn_context":
+                    m = (rec.get("payload") or {}).get("model")
+                    if m:
+                        current_model = m
+                    continue
+                if byte_start in want and current_model:
+                    db.execute(
+                        "UPDATE messages SET model = ? WHERE uuid = ?",
+                        (current_model, want[byte_start])
+                    )
+                    stats["updated"] += 1
+        stats["files"] += 1
+    db.commit()
+
     if own_db:
         db.close()
     return stats

@@ -745,6 +745,17 @@ def main():
             f"({stats['claude_files_scanned']} Claude files, "
             f"{stats['codex_files_scanned']} Codex files scanned)"
         )
+    elif args[0] == "--backfill-models":
+        from cc_anywhere.sqlite_capture import backfill_models
+        print("Backfilling model for existing assistant messages "
+              "(Claude, Codex, Gemini)…")
+        stats = backfill_models()
+        print(
+            f"Filled model on {stats['updated']:,} messages "
+            f"across {stats['files']:,} transcript files."
+            + (f" ({stats['skipped_missing_file']} skipped — file moved/deleted)"
+               if stats['skipped_missing_file'] else "")
+        )
     elif args[0] == "--db-search" and len(args) > 1:
         # Deprecated alias — translates to `--search <q> --mode keyword`.
         print("note: --db-search is deprecated; use `cc-anywhere --search <q> --mode keyword`",
@@ -998,13 +1009,12 @@ def main():
         print("    --mode hybrid                                  Both, ranked together (default)")
         print("    --limit N                                      Cap results (default: 10)")
         print("  cc-anywhere --read [window]                    Read recent conversations chronologically")
-        print("  cc-anywhere --ask <q>                          Search + LLM-synthesized answer with quotes")
+        print("  cc-anywhere --ask <q>                          Ask in plain language → quoted, source-linked digest")
         print("  cc-anywhere --view <chunk_id>                  Read the full content of a chunk")
         print("  cc-anywhere --source <chunk_id>                Show raw transcript provenance")
         print("\nCapture & sync:")
         print("  cc-anywhere --capture    Capture sessions to SQLite DB")
         print("  cc-anywhere --index-semantic Build natural-language search index")
-        print("  cc-anywhere --backfill-sources  Link old DB rows to raw transcripts")
         print("  cc-anywhere --sync       Push to remote")
         print("  cc-anywhere --pull       Pull from remote")
         print("  cc-anywhere --backup     Backup history to monthly archive")
@@ -1014,15 +1024,10 @@ def main():
         print("  cc-anywhere --weekly     Weekly activity digest")
         print("  cc-anywhere --monthly    Monthly activity digest")
         print("  cc-anywhere --db-stats   Capture database statistics (basic counts)")
-        print("  cc-anywhere --git-analysis [days]  Git correlation report")
         print("\nReference:")
         print("  cc-anywhere --help-guide Full documentation")
         print("  cc-anywhere --llm-guide  LLM-facing usage reference (run this if you are an AI agent)")
         print("  cc-anywhere --version")
-        print("\nDeprecated (use --search):")
-        print("  cc-anywhere --db-search <q>        → --search <q> --mode keyword")
-        print("  cc-anywhere --semantic-search <q>  → --search <q>  (hybrid is default)")
-        print("  cc-anywhere --grep-history <q>     legacy substring grep over raw history")
     else:
         print(f"Unknown option: {args[0]}")
         print("Use --help for usage.")

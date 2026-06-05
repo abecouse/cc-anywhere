@@ -6,6 +6,7 @@ Statistics/analytics display for cc-anywhere.
 import calendar
 import json
 import logging
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -400,9 +401,179 @@ def show_usage():
     except Exception:
         db_size_mb = 0
 
+    # ── Snapshot stats (streaks, peak hour, heatmap, token estimate) ──
+    # Per-day / per-hour counts in LOCAL time: SQLite converts the ISO-8601
+    # 'Z' timestamps with 'localtime' so day boundaries, streaks and the peak
+    # hour line up with the wall clock instead of UTC.
+    day_rows = db.execute(
+        "SELECT strftime('%Y-%m-%d', timestamp, 'localtime') AS day, COUNT(*) "
+        "FROM messages WHERE timestamp IS NOT NULL GROUP BY day"
+    ).fetchall()
+    daily_activity = {day: cnt for day, cnt in day_rows if day}
+    days_active = set(daily_activity)
+    active_days = len(days_active)
+
+    # Current streak (consecutive local days ending today)
+    current_streak = 0
+    check = datetime.now().date()
+    while check.strftime("%Y-%m-%d") in days_active:
+        current_streak += 1
+        check = check - timedelta(days=1)
+
+    # Longest streak ever
+    sorted_days = sorted(days_active)
+    longest_streak = 0
+    run = 1
+    for i in range(1, len(sorted_days)):
+        prev = datetime.strptime(sorted_days[i - 1], "%Y-%m-%d")
+        curr = datetime.strptime(sorted_days[i], "%Y-%m-%d")
+        if (curr - prev).days == 1:
+            run += 1
+        else:
+            longest_streak = max(longest_streak, run)
+            run = 1
+    longest_streak = max(longest_streak, run) if sorted_days else 0
+
+    # Peak hour (local)
+    peak_row = db.execute(
+        "SELECT strftime('%H', timestamp, 'localtime') AS hr, COUNT(*) c "
+        "FROM messages WHERE timestamp IS NOT NULL "
+        "GROUP BY hr ORDER BY c DESC LIMIT 1"
+    ).fetchone()
+    peak_hour = int(peak_row[0]) if peak_row and peak_row[0] is not None else None
+
+    # Token estimate — captured *text* only (~chars/4). cc-anywhere stores
+    # message text, not tool calls/outputs, so this is the conversation we
+    # hold, not total API spend.
+    char_row = db.execute("SELECT SUM(LENGTH(content)) FROM messages").fetchone()
+    est_tokens = (char_row[0] or 0) / 4
+
+    # Tools used (capture source → friendly provider name)
+    _TOOL_NAMES = {
+        "claude-code": "Claude Code",
+        "codex": "Codex",
+        "gemini": "Gemini CLI",
+        "gemini-cli": "Gemini CLI",
+        "claude-ai": "Claude.ai",
+    }
+    src_rows = db.execute(
+        "SELECT source, COUNT(*) c FROM sessions "
+        "GROUP BY source ORDER BY c DESC"
+    ).fetchall()
+    tool_parts = []
+    for src, c in src_rows:
+        if not src:
+            continue
+        pct = (c / total_sessions * 100) if total_sessions else 0
+        tool_parts.append(f"{_TOOL_NAMES.get(src, src)} {pct:.0f}%")
+    tools_line = " · ".join(tool_parts) if tool_parts else "—"
+
+    # Models used (across OpenAI / Anthropic / Google). Pretty-print the raw
+    # ids and fall back to the id itself for anything unrecognised.
+    def _pretty_model(m):
+        if not m or m == "<synthetic>":
+            return None
+        mm = re.match(r"claude-(opus|sonnet|haiku)-(\d+)(?:-(\d+))?(?:-\d{6,})?$", m)
+        if mm:
+            fam, major, minor = mm.group(1), mm.group(2), mm.group(3)
+            if minor and len(minor) >= 6:  # a date stamp, not a minor version
+                minor = None
+            ver = f"{major}.{minor}" if minor else major
+            return f"Claude {fam.title()} {ver}"
+        if m.startswith("gpt-"):
+            return "GPT-" + m[4:]
+        if m.startswith("gemini-"):
+            tail = [p.title() for p in m.split("-")[1:] if p != "preview"]
+            return "Gemini " + " ".join(tail)
+        return m
+
+    model_rows = db.execute(
+        "SELECT model, COUNT(*) c FROM messages "
+        "WHERE model IS NOT NULL AND model != '<synthetic>' "
+        "GROUP BY model ORDER BY c DESC"
+    ).fetchall()
+    model_total = sum(c for _, c in model_rows) or 0
+    top_model = _pretty_model(model_rows[0][0]) if model_rows else None
+
+    def _fmt_tokens(t):
+        if t >= 1e6:
+            return f"~{t / 1e6:.1f}M"
+        if t >= 1e3:
+            return f"~{t / 1e3:.0f}k"
+        return f"~{t:.0f}"
+
+    def _fmt_hour(h):
+        if h is None:
+            return "—"
+        return f"{h % 12 or 12} {'AM' if h < 12 else 'PM'}"
+
+    def _streak(n):
+        return f"{n} day" + ("" if n == 1 else "s")
+
     print("cc-anywhere — usage")
     print("=" * 60)
     print()
+    print(f"  {total_sessions:,} sessions · {total_messages:,} messages · "
+          f"{_fmt_tokens(est_tokens)} tokens of captured text · {projects:,} projects")
+    print()
+    print(f"  {'Active days':<16}{str(active_days):<12}"
+          f"{'Peak hour':<16}{_fmt_hour(peak_hour)}")
+    print(f"  {'Current streak':<16}{_streak(current_streak):<12}"
+          f"{'Longest streak':<16}{_streak(longest_streak)}")
+    print(f"  {'Tools':<16}{tools_line}")
+    if top_model:
+        print(f"  {'Favorite model':<16}{top_model}")
+    print()
+
+    # ── Heatmap (last 13 weeks, GitHub-contribution style) ──
+    today_d = datetime.now()
+    start_cell = (today_d - timedelta(days=today_d.weekday() + 12 * 7)).date()
+
+    # Relative shading: bucket each day by its share of the busiest day in
+    # the window, so the gradient adapts to the user's volume (a few msgs/day
+    # or hundreds) instead of using fixed thresholds.
+    window_max = max(
+        (cnt for day, cnt in daily_activity.items()
+         if datetime.strptime(day, "%Y-%m-%d").date() >= start_cell),
+        default=0,
+    )
+
+    def _cell(count):
+        if count == 0:
+            return "·"
+        frac = count / window_max if window_max else 0
+        if frac <= 0.25:
+            return "░"
+        if frac <= 0.50:
+            return "▒"
+        if frac <= 0.75:
+            return "▓"
+        return "█"
+
+    print("  Activity (last 13 weeks)")
+    day_names = ["Mon", "", "Wed", "", "Fri", "", ""]
+    for dow in range(7):
+        row = f"  {day_names[dow]:>3} "
+        for week in range(13):
+            ws = today_d - timedelta(days=today_d.weekday() + (12 - week) * 7)
+            cell = (ws + timedelta(days=dow)).date()
+            if cell <= today_d.date():
+                row += _cell(daily_activity.get(cell.strftime("%Y-%m-%d"), 0))
+            else:
+                row += " "
+        print(row)
+    print(f"      {start_cell.strftime('%b %-d')} → "
+          f"{today_d.strftime('%b %-d')}    Less ·░▒▓█ More")
+    print()
+
+    # ── A little delight (matches Claude Code Desktop's flourish) ──
+    # Harry Potter and the Philosopher's Stone ≈ 100k tokens.
+    books = est_tokens / 100_000
+    if books >= 1:
+        print(f"  You've captured ~{books:.0f}× the text of "
+              f"Harry Potter and the Philosopher's Stone.")
+        print()
+
     print("CAPTURE STATUS")
     print(f"  Total sessions:   {total_sessions:>8,}")
     print(f"  Total messages:   {total_messages:>8,}")
@@ -446,6 +617,15 @@ def show_usage():
         for source, count in by_source:
             pct = (count / total_sessions * 100) if total_sessions else 0
             print(f"  {source or 'unknown':<16}{count:>6,}  ({pct:.0f}%)")
+        print()
+
+    # ── By model (across OpenAI / Anthropic / Google) ─────────
+    if model_rows:
+        print("BY MODEL")
+        for model, count in model_rows[:8]:
+            label = _pretty_model(model) or model
+            pct = (count / model_total * 100) if model_total else 0
+            print(f"  {label:<26}{count:>8,}  ({pct:.0f}%)")
         print()
 
     # ── By machine ────────────────────────────────────────────

@@ -5,6 +5,8 @@ Sync operations for cc-anywhere.
 Handles pushing/pulling state between machines via git.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import subprocess

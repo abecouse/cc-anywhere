@@ -9,6 +9,8 @@ That gives cc-anywhere a useful offline baseline while leaving room for a
 future embedding provider or sqlite-vec backend.
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import math

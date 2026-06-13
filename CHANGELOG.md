@@ -4,6 +4,26 @@ All notable changes to `cc-anywhere` are documented here.
 
 ---
 
+## [1.3.1] — 2026-06-12
+
+### Fix: runs on Python 3.8 / 3.9 again
+
+`cc-anywhere` declares support for Python 3.8+, but three modules used the
+`X | Y` union type syntax (PEP 604) without the `from __future__ import
+annotations` guard — so on Python 3.8 and 3.9 the package crashed on import
+(`TypeError: unsupported operand type(s) for |`) the moment you ran any command.
+This affected anyone on the default macOS Python (3.9).
+
+- Added `from __future__ import annotations` to `sync.py`, `semantic.py`, and
+  `sqlite_capture.py`, bringing them in line with the modules that already had
+  it. All `|` usages are annotation-only, so this fully resolves the crash with
+  no behavior change.
+- Verified on a real Python 3.9.6 install.
+
+If you previously hit this, just upgrade: `pip install --upgrade cc-anywhere`.
+
+---
+
 ## [1.3.0] — 2026-06-05
 
 ### See which AI models you actually use

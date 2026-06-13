@@ -7,6 +7,8 @@ and assistant text replies in a SQLite database with full-text search.
 Skips tool_use/tool_result entries to keep the DB focused on human-readable content.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import re

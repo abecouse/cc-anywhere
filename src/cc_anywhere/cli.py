@@ -818,6 +818,11 @@ def main():
             _print_json_context(answer)
         else:
             print(answer)
+    elif args[0] == "--mcp":
+        # MCP stdio server: one shared memory for all MCP-capable agents
+        # (Claude Code, Codex, Gemini CLI, Cursor, Claude Desktop).
+        from cc_anywhere.mcp_server import main as mcp_main
+        mcp_main()
     elif args[0] == "--view" and len(args) > 1:
         from cc_anywhere.semantic import view_chunk
         from cc_anywhere.sqlite_capture import _local_display
@@ -1012,6 +1017,8 @@ def main():
         print("  cc-anywhere --ask <q>                          Ask in plain language → quoted, source-linked digest")
         print("  cc-anywhere --view <chunk_id>                  Read the full content of a chunk")
         print("  cc-anywhere --source <chunk_id>                Show raw transcript provenance")
+        print("\nServe:")
+        print("  cc-anywhere --mcp        MCP stdio server: recall_* + memory_* tools for any MCP-capable agent")
         print("\nCapture & sync:")
         print("  cc-anywhere --capture    Capture sessions to SQLite DB")
         print("  cc-anywhere --index-semantic Build natural-language search index")

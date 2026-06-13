@@ -1453,6 +1453,185 @@ def capture_claude_ai_export(
     return stats
 
 
+def _chatgpt_epoch_to_iso(ct):
+    """Convert a ChatGPT epoch-seconds float to the cc-anywhere ISO-UTC shape."""
+    if not ct:
+        return None
+    try:
+        return (
+            datetime.fromtimestamp(float(ct), tz=timezone.utc)
+            .strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+            + "Z"
+        )
+    except (ValueError, OSError, TypeError):
+        return None
+
+
+def _chatgpt_thread_messages(conv):
+    """Walk a ChatGPT conversation `mapping` tree into a chronological thread.
+
+    ChatGPT exports store messages as a node graph (each node has a parent
+    and children — regenerations create branches). The conversation the user
+    actually saw is the path from `current_node` back to the root, reversed.
+    Returns a list of (node_msg_id, role, text, create_time) tuples for the
+    visible user/assistant turns only.
+    """
+    mapping = conv.get("mapping") or {}
+    cur = conv.get("current_node")
+    chain, seen = [], set()
+    while cur and cur in mapping and cur not in seen:
+        seen.add(cur)
+        chain.append(cur)
+        cur = mapping[cur].get("parent")
+    chain.reverse()
+    if not chain:
+        chain = list(mapping.keys())
+
+    out = []
+    for nid in chain:
+        node = mapping.get(nid) or {}
+        msg = node.get("message")
+        if not msg:
+            continue
+        role = (msg.get("author") or {}).get("role")
+        if role not in ("user", "assistant"):
+            continue
+        meta = msg.get("metadata") or {}
+        if meta.get("is_visually_hidden_from_conversation"):
+            continue
+        content = msg.get("content") or {}
+        ctype = content.get("content_type")
+        if ctype not in ("text", "multimodal_text"):
+            # Skip code/tether/execution-output blocks — keep memory readable.
+            continue
+        parts = content.get("parts") or []
+        text = "\n\n".join(p for p in parts if isinstance(p, str)).strip()
+        if not text:
+            continue
+        out.append((msg.get("id") or nid, role, text, msg.get("create_time")))
+    return out
+
+
+def capture_chatgpt_export(
+    export_path,
+    db: sqlite3.Connection = None,
+    project_name: str = "ChatGPT",
+) -> dict:
+    """Ingest an OpenAI/ChatGPT data export into the messages DB.
+
+    `export_path` may be a single ``conversations.json`` file or a directory
+    containing the multi-file split (``conversations-000.json`` … ). Each
+    conversation is a node graph; we walk the `current_node` → root path into
+    a chronological thread (see `_chatgpt_thread_messages`).
+
+    Tagged with source='chatgpt' to sit alongside claude-code, codex, gemini,
+    and claude-ai. Idempotent and additive: a conversation whose
+    ``chatgpt-<id>`` session already exists is skipped whole, so this only
+    pulls in what's missing and re-running is a no-op.
+    """
+    import uuid as _uuid
+
+    own_db = db is None
+    if own_db:
+        db = get_db()
+
+    stats = {"new_sessions": 0, "new_messages": 0,
+             "conversations_scanned": 0, "skipped_existing": 0,
+             "skipped_empty": 0}
+
+    path = Path(export_path)
+    if path.is_dir():
+        files = sorted(path.glob("conversations*.json"))
+    elif path.exists():
+        files = [path]
+    else:
+        files = []
+    if not files:
+        if own_db:
+            db.close()
+        return stats
+
+    try:
+        import socket
+        machine_name = socket.gethostname()
+        for suffix in [".local", ".localdomain", ".lan"]:
+            machine_name = machine_name.replace(suffix, "")
+    except OSError:
+        machine_name = "unknown"
+
+    for conv_file in files:
+        try:
+            with open(conv_file, "r", encoding="utf-8") as f:
+                conversations = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        for conv in conversations:
+            stats["conversations_scanned"] += 1
+            conv_id = conv.get("conversation_id") or conv.get("id")
+            if not conv_id:
+                continue
+            session_id = "chatgpt-" + str(conv_id)
+
+            if db.execute(
+                "SELECT 1 FROM sessions WHERE session_id = ?",
+                (session_id,),
+            ).fetchone():
+                stats["skipped_existing"] += 1
+                continue
+
+            thread = _chatgpt_thread_messages(conv)
+            if not thread:
+                stats["skipped_empty"] += 1
+                continue
+
+            started_at = (_chatgpt_epoch_to_iso(conv.get("create_time"))
+                          or _utc_iso_now())
+            last_at = (_chatgpt_epoch_to_iso(conv.get("update_time"))
+                       or started_at)
+            label = conv.get("title") or ""
+
+            db.execute(
+                "INSERT INTO sessions "
+                "(session_id, project_path, project_name, started_at, "
+                " last_message_at, machine_name, source, session_label) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (session_id, "chatgpt:export", project_name, started_at,
+                 last_at, machine_name, "chatgpt", label),
+            )
+            stats["new_sessions"] += 1
+
+            for node_msg_id, role, text, ct in thread:
+                msg_uuid = str(_uuid.uuid5(
+                    _uuid.NAMESPACE_URL,
+                    f"chatgpt:{conv_id}:{node_msg_id}",
+                ))
+                if db.execute(
+                    "SELECT 1 FROM messages WHERE uuid = ?",
+                    (msg_uuid,),
+                ).fetchone():
+                    continue
+                ts = _chatgpt_epoch_to_iso(ct) or started_at
+                db.execute(
+                    "INSERT INTO messages "
+                    "(uuid, session_id, role, content, timestamp) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (msg_uuid, session_id, role, text, ts),
+                )
+                stats["new_messages"] += 1
+                db.execute(
+                    "UPDATE sessions SET last_message_at = ? "
+                    "WHERE session_id = ? "
+                    "AND (last_message_at IS NULL OR last_message_at < ?)",
+                    (ts, session_id, ts),
+                )
+
+    db.commit()
+    if own_db:
+        db.close()
+    return stats
+
+
 def _update_message_source(db, session_id, role, content, timestamp,
                            source_path, source_line, byte_start, byte_end) -> bool:
     """Attach raw transcript provenance to one already-captured message."""

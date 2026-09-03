@@ -4,6 +4,57 @@ All notable changes to `cc-anywhere` are documented here.
 
 ---
 
+## [1.3.2] — 2026-09-02
+
+### Fix: sessions attributed to a machine that never existed
+
+Three defects corrupted session provenance. All are fixed, and existing rows
+can be repaired in place — no re-capture needed.
+
+- **`Mac.localdomain` was recorded as the machine `Macdomain`.** `get_machine_name()`
+  stripped domain suffixes with `str.replace`, testing `".local"` before
+  `".localdomain"` — so the shorter suffix matched *inside* the longer one and
+  left the tail behind. Suffixes are now matched longest-first and anchored with
+  `endswith`, so only a genuine trailing suffix is removed. A host like
+  `my.local.box` is no longer mangled either. An unresolvable hostname now
+  yields `"unknown"` instead of raising.
+- **The capture paths ignored your configured machine name.** All four call
+  sites in `sqlite_capture.py` read `socket.gethostname()` directly, so
+  `machine_name` in `~/.cc-anywhere.json` had no effect on captured rows — it
+  only ever applied to sync. Renaming your Mac silently split its history into a
+  second machine. All four now route through `get_machine_name()`, making the
+  config file the single source of truth.
+- **`started_at` recorded when a session was indexed, not when it happened.**
+  The Claude Code capture path inserts the session row before reading any
+  messages and stamped `started_at` with the current time. Every session
+  imported in one batch therefore shared a single timestamp seconds apart, and
+  time-windowed queries (`--read "this week"`, `--usage`, the digests) could not
+  see any of them. `started_at` is now clamped back to the earliest message
+  timestamp observed, mirroring how `last_message_at` is advanced. Incremental
+  captures never push it forward.
+
+Repairing an existing database:
+
+```sql
+-- collapse a mangled machine name into the real one
+UPDATE sessions SET machine_name = 'Your-Mac' WHERE machine_name = 'Macdomain';
+
+-- recover true session start times from the messages themselves
+UPDATE sessions SET started_at = (
+    SELECT MIN(m.timestamp) FROM messages m
+    WHERE m.session_id = sessions.session_id AND m.timestamp IS NOT NULL
+)
+WHERE EXISTS (
+    SELECT 1 FROM messages m
+    WHERE m.session_id = sessions.session_id AND m.timestamp IS NOT NULL
+);
+```
+
+Adds `tests/test_machine_name.py` (11 tests) covering suffix stripping, config
+precedence over hostname, and `started_at` across initial and incremental capture.
+
+---
+
 ## [1.3.1] — 2026-06-12
 
 ### Fix: runs on Python 3.8 / 3.9 again

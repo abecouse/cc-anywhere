@@ -37,11 +37,17 @@ def get_machine_name() -> str:
     if config.get("machine_name"):
         return config["machine_name"]
     import socket
-    hostname = socket.gethostname()
-    # Strip common suffixes
-    for suffix in [".local", ".localdomain", ".lan"]:
-        hostname = hostname.replace(suffix, "")
-    return hostname
+    try:
+        hostname = socket.gethostname()
+    except OSError:
+        return "unknown"
+    # Strip one trailing domain suffix. Longest first, and anchored at the end:
+    # a substring replace of ".local" rewrites "Mac.localdomain" to "Macdomain".
+    for suffix in (".localdomain", ".local", ".lan"):
+        if hostname.endswith(suffix):
+            hostname = hostname[: -len(suffix)]
+            break
+    return hostname or "unknown"
 
 
 def set_machine_name(name: str):

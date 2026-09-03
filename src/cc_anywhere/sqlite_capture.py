@@ -427,11 +427,11 @@ def capture_sessions(db: sqlite3.Connection = None,
         return stats
 
     try:
-        import socket
-        machine_name = socket.gethostname()
-        for suffix in [".local", ".localdomain", ".lan"]:
-            machine_name = machine_name.replace(suffix, "")
-    except OSError:
+        # Single source of truth: the configured machine_name in
+        # ~/.cc-anywhere.json, falling back to a sanitised hostname.
+        from cc_anywhere.core import get_machine_name
+        machine_name = get_machine_name()
+    except Exception:
         machine_name = "unknown"
 
     # Scan all project directories
@@ -552,6 +552,16 @@ def capture_sessions(db: sqlite3.Connection = None,
                                     "WHERE session_id = ? AND (last_message_at IS NULL OR last_message_at < ?)",
                                     (ts_str, session_id, ts_str)
                                 )
+                                # The session row is inserted at capture time,
+                                # so started_at begins as "now". Pull it back to
+                                # the earliest message actually seen, otherwise
+                                # every imported session looks like it began the
+                                # moment it was indexed.
+                                db.execute(
+                                    "UPDATE sessions SET started_at = ? "
+                                    "WHERE session_id = ? AND (started_at IS NULL OR started_at > ?)",
+                                    (ts_str, session_id, ts_str)
+                                )
                             if line_number is not None:
                                 line_number += 1
                             continue
@@ -580,6 +590,16 @@ def capture_sessions(db: sqlite3.Connection = None,
                                 db.execute(
                                     "UPDATE sessions SET last_message_at = ? "
                                     "WHERE session_id = ? AND (last_message_at IS NULL OR last_message_at < ?)",
+                                    (ts_str, session_id, ts_str)
+                                )
+                                # The session row is inserted at capture time,
+                                # so started_at begins as "now". Pull it back to
+                                # the earliest message actually seen, otherwise
+                                # every imported session looks like it began the
+                                # moment it was indexed.
+                                db.execute(
+                                    "UPDATE sessions SET started_at = ? "
+                                    "WHERE session_id = ? AND (started_at IS NULL OR started_at > ?)",
                                     (ts_str, session_id, ts_str)
                                 )
 
@@ -700,11 +720,11 @@ def capture_codex_sessions(db: sqlite3.Connection = None,
         return stats
 
     try:
-        import socket
-        machine_name = socket.gethostname()
-        for suffix in [".local", ".localdomain", ".lan"]:
-            machine_name = machine_name.replace(suffix, "")
-    except OSError:
+        # Single source of truth: the configured machine_name in
+        # ~/.cc-anywhere.json, falling back to a sanitised hostname.
+        from cc_anywhere.core import get_machine_name
+        machine_name = get_machine_name()
+    except Exception:
         machine_name = "unknown"
 
     label_map = _load_codex_session_index(cdir)
@@ -1008,11 +1028,11 @@ def capture_gemini_sessions(db: sqlite3.Connection = None,
         return stats
 
     try:
-        import socket
-        machine_name = socket.gethostname()
-        for suffix in [".local", ".localdomain", ".lan"]:
-            machine_name = machine_name.replace(suffix, "")
-    except OSError:
+        # Single source of truth: the configured machine_name in
+        # ~/.cc-anywhere.json, falling back to a sanitised hostname.
+        from cc_anywhere.core import get_machine_name
+        machine_name = get_machine_name()
+    except Exception:
         machine_name = "unknown"
 
     # ~/.gemini/projects.json maps absolute path -> project name. Invert
@@ -1366,11 +1386,11 @@ def capture_claude_ai_export(
         return stats
 
     try:
-        import socket
-        machine_name = socket.gethostname()
-        for suffix in [".local", ".localdomain", ".lan"]:
-            machine_name = machine_name.replace(suffix, "")
-    except OSError:
+        # Single source of truth: the configured machine_name in
+        # ~/.cc-anywhere.json, falling back to a sanitised hostname.
+        from cc_anywhere.core import get_machine_name
+        machine_name = get_machine_name()
+    except Exception:
         machine_name = "unknown"
 
     project_path = str(path.parent)

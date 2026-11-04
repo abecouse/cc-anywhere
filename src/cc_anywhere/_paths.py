@@ -27,6 +27,10 @@ DB_PATH = HOME / ".cc-anywhere-sessions.db"
 SYNC_DIR = HOME / ".cc-sync"
 BACKUP_DIR = HOME / ".cc-backups"
 CONFIG_FILE = HOME / ".cc-anywhere.json"
+# Held for the duration of a --capture run so the Stop hook firing on every
+# turn, in every active session, can't pile up N concurrent captures all
+# fighting over DB_PATH -- a losing process skips instead of competing.
+CAPTURE_LOCK_PATH = HOME / ".cc-anywhere-capture.lock"
 
 _LEGACY: dict[Path, Path] = {
     DB_PATH: HOME / ".claude-anywhere-sessions.db",

@@ -683,10 +683,24 @@ def main():
         from cc_anywhere.init_setup import run_init
         return run_init()
     elif args[0] == "--capture":
+        import fcntl
+        from cc_anywhere._paths import CAPTURE_LOCK_PATH
         from cc_anywhere.sqlite_capture import (
             capture_sessions, capture_codex_sessions,
             capture_gemini_sessions, get_capture_stats,
         )
+        # The Stop hook fires this async on every turn, in every active
+        # session -- without a lock, a burst of fast turns piles up N
+        # concurrent captures all fighting over the same SQLite file instead
+        # of one running quickly and the rest no-oping. flock is held only
+        # for this process's lifetime, so a killed/crashed holder releases it
+        # automatically -- nothing to clean up by hand.
+        lock_fh = open(CAPTURE_LOCK_PATH, "w")
+        try:
+            fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            print("capture already running, skipping")
+            return
         cc = capture_sessions()
         print(f"Claude Code: {cc['new_sessions']} new sessions, "
               f"{cc['new_messages']} new messages "
